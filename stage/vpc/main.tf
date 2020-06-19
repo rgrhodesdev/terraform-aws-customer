@@ -31,6 +31,6 @@ module "environment_vpc" {
     private_subnet_b = "192.168.11.0/24"
     private_subnet_c = "192.168.12.0/24"
 
-    require_nat_gateway = true
+    require_nat_gateway = false
 
 }

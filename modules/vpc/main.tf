@@ -150,7 +150,7 @@ resource "aws_route_table" "customer_public_c_rt" {
 // Public Route Table C Routes
 
 resource "aws_route" "customer_public_c_default_route" {
-    route_table_id = aws_route_table.customer_public_b_rt.id
+    route_table_id = aws_route_table.customer_public_c_rt.id
     destination_cidr_block = "0.0.0.0/0"
     gateway_id =  aws_internet_gateway.customer_igw.id
 }
@@ -167,27 +167,50 @@ resource "aws_route_table" "customer_private_a_rt" {
   
 }
 
-/*
+
 resource "aws_route" "customer_private_a_default_route" {
+    count = var.require_nat_gateway ? 1 : 0
+
     route_table_id = aws_route_table.customer_private_a_rt.id
     destination_cidr_block = "0.0.0.0/0"
-    nat_gateway_id =  aws_nat_gateway.customer_ngw.id
+    nat_gateway_id = aws_nat_gateway.customer_ngw.*.id[count.index]
 }
-*/
+
 
 resource "aws_route_table" "customer_private_b_rt" {
 
     vpc_id = aws_vpc.customer_vpc.id
-    # route {
-
-    #     cidr_block = "0.0.0.0/0"
-    #     instance_id = aws_instance.NATA.id
-    # }
-
+ 
         tags = {
         Name = "${var.vpc_name} private RT B"
     }
   
+}
+
+resource "aws_route" "customer_private_b_default_route" {
+    count = var.require_nat_gateway ? 1 : 0
+
+    route_table_id = aws_route_table.customer_private_b_rt.id
+    destination_cidr_block = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.customer_ngw.*.id[count.index]
+}
+
+resource "aws_route_table" "customer_private_c_rt" {
+
+    vpc_id = aws_vpc.customer_vpc.id
+ 
+        tags = {
+        Name = "${var.vpc_name} private RT C"
+    }
+  
+}
+
+resource "aws_route" "customer_private_c_default_route" {
+    count = var.require_nat_gateway ? 1 : 0
+
+    route_table_id = aws_route_table.customer_private_c_rt.id
+    destination_cidr_block = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.customer_ngw.*.id[count.index]
 }
 
 
@@ -206,61 +229,30 @@ resource "aws_route_table_association" "customer_public_b_rt_assoc" {
 
 }
 
-resource "aws_route_table_association" "customer_private_art_assoc" {
+resource "aws_route_table_association" "customer_public_c_rt_assoc" {
+
+    route_table_id = aws_route_table.customer_public_c_rt.id
+    subnet_id = aws_subnet.publicc.id
+
+}
+
+resource "aws_route_table_association" "customer_private_a_rt_assoc" {
 
     route_table_id = aws_route_table.customer_private_a_rt.id
     subnet_id = aws_subnet.privatea.id
 
 }
 
-resource "aws_route_table_association" "customer_private_brt_assoc" {
+resource "aws_route_table_association" "customer_private_b_rt_assoc" {
 
     route_table_id = aws_route_table.customer_private_b_rt.id
     subnet_id = aws_subnet.privateb.id
 
 }
 
+resource "aws_route_table_association" "customer_private_c_rt_assoc" {
 
-# resource "aws_instance" "NATA" {
-    
-    
-#     ami = "ami-0236d0cbbbe64730c"
-#     instance_type = "t2.micro"
-#     subnet_id = aws_subnet.publica.id
-#     associate_public_ip_address = true
-#     vpc_security_group_ids = [aws_security_group.NATA_SG.id]
-#     source_dest_check = false
-#     key_name = "dev03_key"
-
-#     tags = {
-
-#         Name = "NAT Instance A"
-#     }
-
-
-# }
-
-resource "aws_security_group" "NATA_SG" {
-
-    name = "NATA_SG"
-    description = "SG For NATA instance"
-    vpc_id = aws_vpc.customer_vpc.id
-
-    ingress {
-
-        protocol = "-1"
-        from_port = 0
-        to_port = 0
-        cidr_blocks = [aws_vpc.customer_vpc.cidr_block]
-
-    }
-
-    egress {
-        from_port   = 0
-        to_port     = 0
-        protocol    = "-1"
-        cidr_blocks = ["0.0.0.0/0"]
-    }
-
+    route_table_id = aws_route_table.customer_private_c_rt.id
+    subnet_id = aws_subnet.privatec.id
 
 }
