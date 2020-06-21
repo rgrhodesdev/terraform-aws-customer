@@ -1,11 +1,31 @@
-//No Provider in modules
-
-data "terraform_remote_state" "db" {
+data "terraform_remote_state" "dns" {
   backend = "s3"
 
   config = {
-    bucket = var.db_remote_state_bucket
-    key    = var.db_remote_state_key
+    bucket = var.dns_remote_state_bucket
+    key    = var.dns_remote_state_key
+    region = "eu-west-1"
+  }
+
+}
+
+data "terraform_remote_state" "certificates" {
+  backend = "s3"
+
+  config = {
+    bucket = var.certificates_remote_state_bucket
+    key    = var.certificates_remote_state_key
+    region = "eu-west-1"
+  }
+
+}
+
+data "terraform_remote_state" "vpc" {
+  backend = "s3"
+
+  config = {
+    bucket = var.vpc_remote_state_bucket
+    key    = var.vpc_remote_state_key
     region = "eu-west-1"
   }
 
@@ -17,56 +37,49 @@ data "template_file" "user_data" {
 
   vars = {
     app_env = var.environment
-    server_port = var.server_port
-    db_address  = data.terraform_remote_state.db.outputs.address
-    db_port     = data.terraform_remote_state.db.outputs.port
 
   }
 
 }
 
+resource "aws_lb" "web" {
 
-data "aws_vpcs" "environment" {
-
-
-  tags = {
-    Name = var.environment
-  }
-}
-
-
-data "aws_subnet_ids" "private" {
-  vpc_id = element(tolist(data.aws_vpcs.environment.ids), 0)
-
-
-
-  tags = {
-    Name = "*Private*"
-  }
-}
-
-data "aws_subnet_ids" "public" {
-  vpc_id = element(tolist(data.aws_vpcs.environment.ids), 0)
-
-  tags = {
-    Name = "*Public*"
-  }
-}
-
-resource "aws_lb" "example" {
-
-  name               = "${var.cluster_name}-example"
+  name               = "${var.cluster_name}-web-${var.environment}"
   load_balancer_type = "application"
-  subnets            = data.aws_subnet_ids.public.ids
+  subnets            = data.terraform_remote_state.vpc.outputs.public_subnet_ids
   security_groups    = [aws_security_group.alb.id]
 
 }
 
+# Default listener for http redirects to port https
+
 resource "aws_lb_listener" "http" {
 
-  load_balancer_arn = aws_lb.example.arn
-  port              = 80
+  load_balancer_arn = aws_lb.web.arn
+  port              = var.http_alb_port
   protocol          = "HTTP"
+
+  default_action {
+
+    type = "redirect"
+
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
+
+  }
+
+}
+
+resource "aws_lb_listener" "https" {
+
+  load_balancer_arn = aws_lb.web.arn
+  port              = var.https_alb_port
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08"
+  certificate_arn   = data.terraform_remote_state.certificates.outputs.webserver_alb_cert_arn
 
   default_action {
 
@@ -83,9 +96,10 @@ resource "aws_lb_listener" "http" {
 
 }
 
-resource "aws_lb_listener_rule" "asg" {
 
-  listener_arn = aws_lb_listener.http.arn
+resource "aws_lb_listener_rule" "asg_https" {
+
+  listener_arn = aws_lb_listener.https.arn
   priority     = 100
 
   condition {
@@ -105,10 +119,10 @@ resource "aws_lb_listener_rule" "asg" {
 
 resource "aws_lb_target_group" "asg" {
 
-  name     = "${var.cluster_name}-example"
+  name     = "${var.cluster_name}-web-${var.environment}"
   port     = var.server_port
   protocol = "HTTP"
-  vpc_id   = element(tolist(data.aws_vpcs.environment.ids), 0)
+  vpc_id   = data.terraform_remote_state.vpc.outputs.vpc_id
 
   health_check {
     path                = "/"
@@ -125,20 +139,12 @@ resource "aws_lb_target_group" "asg" {
 
 
 
-resource "aws_launch_configuration" "example" {
+resource "aws_launch_configuration" "web" {
 
-  image_id                    = "ami-0dad359ff462124ca"
-  instance_type               = "t2.micro"
+  image_id                    = var.web_ami_id
+  instance_type               = var.web_instance_type
   security_groups             = [aws_security_group.instance.id]
   associate_public_ip_address = false
-
-  /*
-    user_data = <<-EOF
-                #!/bin/bash
-                echo "Hello, World" > index.html
-                nohup busybox httpd -f -p ${var.server_port} &
-                EOF
-    */
 
   user_data = data.template_file.user_data.rendered
 
@@ -149,20 +155,19 @@ resource "aws_launch_configuration" "example" {
   }
 }
 
-resource "aws_autoscaling_group" "example" {
+resource "aws_autoscaling_group" "web" {
 
-  launch_configuration = aws_launch_configuration.example.name
-  vpc_zone_identifier  = data.aws_subnet_ids.private.ids
+  launch_configuration = aws_launch_configuration.web.name
+  vpc_zone_identifier  = data.terraform_remote_state.vpc.outputs.private_subnet_ids
   target_group_arns    = [aws_lb_target_group.asg.arn]
   health_check_type    = "ELB"
 
-
-  min_size = 2
-  max_size = 3
+  min_size = var.web_asg_min
+  max_size = var.web_asg_max
 
   tag {
     key                 = "Name"
-    value               = "terraform-asg-example"
+    value               = "web-asg-${var.environment}"
     propagate_at_launch = true
   }
 
@@ -170,8 +175,8 @@ resource "aws_autoscaling_group" "example" {
 
 resource "aws_security_group" "instance" {
 
-  name   = "${var.cluster_name}-instance"
-  vpc_id = element(tolist(data.aws_vpcs.environment.ids), 0)
+  name   = "${var.cluster_name}-instance-${var.environment}"
+  vpc_id = data.terraform_remote_state.vpc.outputs.vpc_id
 
 
 }
@@ -202,20 +207,33 @@ resource "aws_security_group_rule" "allow_instance_outbound" {
 
 resource "aws_security_group" "alb" {
 
-  name   = "${var.cluster_name}-alb"
-  vpc_id = element(tolist(data.aws_vpcs.environment.ids), 0)
+  name   = "${var.cluster_name}-alb-${var.environment}"
+  vpc_id = data.terraform_remote_state.vpc.outputs.vpc_id
 }
 
-resource "aws_security_group_rule" "allow_alb_inbound" {
+resource "aws_security_group_rule" "allow_alb_inbound_http" {
   type = "ingress"
   security_group_id = aws_security_group.alb.id
 
-  from_port   = var.alb_port
-  to_port     = var.alb_port
+  from_port   = var.http_alb_port
+  to_port     = var.http_alb_port
   protocol    = "tcp"
   cidr_blocks = ["0.0.0.0/0"]
 
 }
+
+resource "aws_security_group_rule" "allow_alb_inbound_https" {
+  type = "ingress"
+  security_group_id = aws_security_group.alb.id
+
+  from_port   = var.https_alb_port
+  to_port     = var.https_alb_port
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"]
+
+}
+
+
 
 resource "aws_security_group_rule" "allow_alb_outbound" {
   type = "egress"
@@ -229,6 +247,25 @@ resource "aws_security_group_rule" "allow_alb_outbound" {
 }
 
 
+resource "aws_route53_record" "www" {
+  count = var.environment == "prod" ? 1 : 0
+
+  zone_id = data.terraform_remote_state.dns.outputs.hosted_zone_id
+  name    = "www.rgrhodesdev.co.uk"
+  type    = "CNAME"
+  ttl     = "300"
+  records = [aws_lb.web.dns_name]
+}
+
+resource "aws_route53_record" "lower_envs" {
+  count = var.environment != "prod" ? 1 : 0
+
+  zone_id = data.terraform_remote_state.dns.outputs.hosted_zone_id
+  name    = "${var.environment}.rgrhodesdev.co.uk"
+  type    = "CNAME"
+  ttl     = "300"
+  records = [aws_lb.web.dns_name]
+}
 
 
 

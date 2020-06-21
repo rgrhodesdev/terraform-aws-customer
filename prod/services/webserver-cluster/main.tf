@@ -4,11 +4,11 @@ provider "aws" {
 
 terraform {
     backend "s3" {
-        bucket = "rgrhodesdev03-terraform-state-file"
+        bucket = "customer-terraform-state-file"
         key = "prod/services/webserver-cluster/terraform.tfstate"
         region = "eu-west-1"
 
-        dynamodb_table = "rgrhodesdev03-terraform-locks"
+        dynamodb_table = "customer-terraform-locks"
         encrypt = true
 
 
@@ -20,9 +20,28 @@ module "webserver-cluster" {
 
     source ="../../../modules/services/webserver-cluster"
 
-    cluster_name = "webservers-prod"
-    db_remote_state_bucket = "rgrhodesdev03-terraform-state-file"
-    db_remote_state_key = "prod/data-stores/mysql/terraform.tfstate"
-    environment = "Prod"
+    vpc_remote_state_bucket = "customer-terraform-state-file"
+    vpc_remote_state_key = "prod/vpc/terraform.tfstate"
+
+    dns_remote_state_bucket = "customer-terraform-state-file"
+    dns_remote_state_key = "global/dns/terraform.tfstate"
+
+    certificates_remote_state_bucket = "customer-terraform-state-file"
+    certificates_remote_state_key = "global/certificates/terraform.tfstate"
+
+    cluster_name = "webserver"
+
+    environment = "prod"
+
+    http_alb_port = 80
+    https_alb_port = 443
+
+    server_port = 80
+
+    web_ami_id = "ami-0ea3405d2d2522162"
+    web_instance_type = "t2.micro"
+
+    web_asg_min = 1
+    web_asg_max = 1
 
 }

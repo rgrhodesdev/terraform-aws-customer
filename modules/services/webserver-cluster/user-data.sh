@@ -1,9 +1,7 @@
 #!/bin/bash
+yum update -y
+yum install -y httpd.x86_64
+systemctl start httpd.service
+systemctl enable httpd.service
+echo "Hello and Welcome to my Web Front End" > /var/www/html/index.html
 
-cat > index.html <<EOF
-<h1>Hello, World - ${app_env}</h1>
-<p>DB Address: ${db_address}</p>
-<p>DB Port: ${db_port}</p>
-EOF
-
-nohup busybox httpd -f -p ${server_port} &
