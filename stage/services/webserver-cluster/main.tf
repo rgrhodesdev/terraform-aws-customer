@@ -31,7 +31,6 @@ module "webserver-cluster" {
 
     cluster_name = "webserver"
 
-
     environment = "stage"
 
     http_alb_port = 80

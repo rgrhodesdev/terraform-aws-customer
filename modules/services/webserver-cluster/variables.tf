@@ -1,22 +1,16 @@
 variable "server_port" {
-
   description = "Web Server Port"
   type        = number
-
 }
 
 variable "http_alb_port" {
-
   description = "HTTP ALB Port"
   type        = number
-
 }
 
 variable "https_alb_port" {
-
   description = "HTTPS ALB Port"
   type        = number
-
 }
 
 variable "cluster_name" {
@@ -61,21 +55,21 @@ variable "environment" {
 
 variable "web_ami_id" {
   description = "AMI ID"
-  type = string
+  type        = string
 
 }
 
 variable "web_instance_type" {
   description = "Instance Type"
-  type = string
+  type        = string
 }
 
 variable "web_asg_min" {
   description = "Minimum Number of Web Instances"
-  type = number
+  type        = number
 }
 
 variable "web_asg_max" {
   description = "Maximum Number of Web Instances"
-  type = number
+  type        = number
 }

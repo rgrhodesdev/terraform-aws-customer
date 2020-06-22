@@ -1,6 +1,5 @@
-// Configure Backend to store terraform state in S3 with locking.
-// Ensures consistent state is shared across the squad.
-
+# Configure Backend to store terraform state in S3 with locking via Dynamo DB.
+# Ensures consistent state is shared across the squad.
 
 provider "aws" {
   region = "eu-west-1"

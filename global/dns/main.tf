@@ -1,17 +1,19 @@
+# Create Route53 hosted zone
+
 provider "aws" {
-    region = "eu-west-1"
+  region = "eu-west-1"
 }
 
 terraform {
-    backend "s3" {
-        bucket = "customer-terraform-state-file"
-        key = "global/dns/terraform.tfstate"
-        region = "eu-west-1"
+  backend "s3" {
+    bucket = "customer-terraform-state-file"
+    key    = "global/dns/terraform.tfstate"
+    region = "eu-west-1"
 
-        dynamodb_table = "customer-terraform-locks"
-        encrypt = true
+    dynamodb_table = "customer-terraform-locks"
+    encrypt        = true
 
-    }
+  }
 
 }
 

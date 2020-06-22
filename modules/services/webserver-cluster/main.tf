@@ -1,3 +1,12 @@
+# Webcluster Module deploys the following infrastructure:
+# Application Load Balancer, listeners (HTTP/HTTPS) and rules
+# Listener Target Group
+# Auto Scaling Group with associated Launch Configuration
+# Instance and ALB security group rules
+# Environment Route53 record
+
+# Reference Route53 outputs from dns module state
+
 data "terraform_remote_state" "dns" {
   backend = "s3"
 
@@ -8,6 +17,8 @@ data "terraform_remote_state" "dns" {
   }
 
 }
+
+#  Reference Certifcate Manager outputs from certificates module state
 
 data "terraform_remote_state" "certificates" {
   backend = "s3"
@@ -20,6 +31,8 @@ data "terraform_remote_state" "certificates" {
 
 }
 
+#  Reference VPC outputs from vpc module state
+
 data "terraform_remote_state" "vpc" {
   backend = "s3"
 
@@ -30,6 +43,8 @@ data "terraform_remote_state" "vpc" {
   }
 
 }
+
+# Define Template file for instance userdata
 
 data "template_file" "user_data" {
 
@@ -42,6 +57,8 @@ data "template_file" "user_data" {
 
 }
 
+# Deploy AWS ALB to public subnets to allow external access
+
 resource "aws_lb" "web" {
 
   name               = "${var.cluster_name}-web-${var.environment}"
@@ -51,7 +68,7 @@ resource "aws_lb" "web" {
 
 }
 
-# Default listener for http redirects to port https
+# Default listener for http. Default rule to direct all traffic to https.
 
 resource "aws_lb_listener" "http" {
 
@@ -72,6 +89,8 @@ resource "aws_lb_listener" "http" {
   }
 
 }
+
+# Listener for https to support SSL offload on the ALB. Certificate Arn reference from global/certificates state
 
 resource "aws_lb_listener" "https" {
 
@@ -96,6 +115,7 @@ resource "aws_lb_listener" "https" {
 
 }
 
+# https listener rule to forward to webserver target group
 
 resource "aws_lb_listener_rule" "asg_https" {
 
@@ -117,6 +137,9 @@ resource "aws_lb_listener_rule" "asg_https" {
 
 }
 
+# Target group for webserver instances. Instances are scaled in/out of target group viz ASG.
+# Traffic will be forwarded to the instances on port 80.
+
 resource "aws_lb_target_group" "asg" {
 
   name     = "${var.cluster_name}-web-${var.environment}"
@@ -137,7 +160,8 @@ resource "aws_lb_target_group" "asg" {
 }
 
 
-
+# AWS Launch Configuration for webserver auto scaling group.
+# user data defined in template file user-data.sh
 
 resource "aws_launch_configuration" "web" {
 
@@ -154,6 +178,12 @@ resource "aws_launch_configuration" "web" {
 
   }
 }
+
+# AWS autoscaling group for web servers
+# Instances will be scaled into the ALB defined above.
+# Instances will be scaled across into private subnets across all eu-west-1 AZs
+# Health check configured as ELB. This will mean if an instance fails the target group health check
+# It will be terminated and replaced
 
 resource "aws_autoscaling_group" "web" {
 
@@ -173,6 +203,11 @@ resource "aws_autoscaling_group" "web" {
 
 }
 
+# Define Security Groups and Rules
+
+
+# Webserver instance Security Group
+
 resource "aws_security_group" "instance" {
 
   name   = "${var.cluster_name}-instance-${var.environment}"
@@ -181,29 +216,33 @@ resource "aws_security_group" "instance" {
 
 }
 
+# Webserver instance rule. Allow inbound access on port 80 from the ALB security group
+
 resource "aws_security_group_rule" "allow_instance_inbound" {
-  type = "ingress"
+  type              = "ingress"
   security_group_id = aws_security_group.instance.id
 
-  from_port       = var.server_port
-  to_port         = var.server_port
-  protocol        = "tcp"
+  from_port                = var.server_port
+  to_port                  = var.server_port
+  protocol                 = "tcp"
   source_security_group_id = aws_security_group.alb.id
 
 }
 
+# Webserver instance rule. Allow outbound - All
+
 resource "aws_security_group_rule" "allow_instance_outbound" {
-  type = "egress"
+  type              = "egress"
   security_group_id = aws_security_group.instance.id
 
-    from_port   = 0
-    to_port     = 0
-    protocol    = -1
-    cidr_blocks = ["0.0.0.0/0"]
+  from_port   = 0
+  to_port     = 0
+  protocol    = -1
+  cidr_blocks = ["0.0.0.0/0"]
 
 }
 
-
+# ALB instance Security Group
 
 resource "aws_security_group" "alb" {
 
@@ -211,8 +250,10 @@ resource "aws_security_group" "alb" {
   vpc_id = data.terraform_remote_state.vpc.outputs.vpc_id
 }
 
+# ALB rule. Allow inbound on port 80.
+
 resource "aws_security_group_rule" "allow_alb_inbound_http" {
-  type = "ingress"
+  type              = "ingress"
   security_group_id = aws_security_group.alb.id
 
   from_port   = var.http_alb_port
@@ -222,8 +263,10 @@ resource "aws_security_group_rule" "allow_alb_inbound_http" {
 
 }
 
+# ALB rule. Allow inbound on port 443.
+
 resource "aws_security_group_rule" "allow_alb_inbound_https" {
-  type = "ingress"
+  type              = "ingress"
   security_group_id = aws_security_group.alb.id
 
   from_port   = var.https_alb_port
@@ -233,10 +276,10 @@ resource "aws_security_group_rule" "allow_alb_inbound_https" {
 
 }
 
-
+# ALB rule. Allow outbound - All
 
 resource "aws_security_group_rule" "allow_alb_outbound" {
-  type = "egress"
+  type              = "egress"
   security_group_id = aws_security_group.alb.id
 
   from_port   = 0
@@ -246,6 +289,8 @@ resource "aws_security_group_rule" "allow_alb_outbound" {
 
 }
 
+# The DNS records created depend on the environment being deployed.
+# If the environment variable = prod then the following record is created.
 
 resource "aws_route53_record" "www" {
   count = var.environment == "prod" ? 1 : 0
@@ -256,6 +301,11 @@ resource "aws_route53_record" "www" {
   ttl     = "300"
   records = [aws_lb.web.dns_name]
 }
+
+# If the environment variable != prod then the following record is created.
+# The subdoamin will depend on the environment begin created.
+# For example environment = stage will create the following record.
+# stage.rgrhodesdev.co.uk
 
 resource "aws_route53_record" "lower_envs" {
   count = var.environment != "prod" ? 1 : 0
