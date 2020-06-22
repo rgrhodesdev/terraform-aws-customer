@@ -43,6 +43,7 @@ resource "aws_dynamodb_table" "terraform_locks" {
 }
 
 terraform {
+  required_version = ">= 0.12.0"
   backend "s3" {
     bucket = "customer-terraform-state-file"
     key    = "global/s3/terraform.tfstate"

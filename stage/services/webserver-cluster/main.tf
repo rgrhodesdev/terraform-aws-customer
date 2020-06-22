@@ -3,6 +3,7 @@ provider "aws" {
 }
 
 terraform {
+    required_version = ">= 0.12.0"
     backend "s3" {
         bucket = "customer-terraform-state-file"
         key = "stage/services/webserver-cluster/terraform.tfstate"
