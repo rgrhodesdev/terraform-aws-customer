@@ -27,6 +27,6 @@ module "environment_vpc" {
     public_subnet = ["10.1.1.0/24", "10.1.2.0/24", "10.1.3.0/24"]
     private_subnet = ["10.1.10.0/24", "10.1.11.0/24", "10.1.12.0/24"]
 
-    require_nat_gateway = false
+    require_nat_gateway = true
 
 }
