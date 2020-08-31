@@ -42,7 +42,7 @@ module "webserver-cluster" {
     web_ami_id = "ami-0ea3405d2d2522162"
     web_instance_type = "t2.micro"
 
-    web_asg_min = 2
-    web_asg_max = 3
+    web_asg_min = 1
+    web_asg_max = 1
 
 }
