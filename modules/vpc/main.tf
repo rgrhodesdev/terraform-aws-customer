@@ -33,6 +33,19 @@ resource "aws_eip" "nat" {
   depends_on = [aws_internet_gateway.customer_igw]
 }
 
+# If require_nat_gateway variable is true then create EIP and NAT Gateway
+# Create EIP for NAT Gateway EC2 Instance (optional)
+
+resource "aws_eip" "nat_gateway_instance" {
+  count = var.require_nat_gateway_instance ? 1 : 0
+
+  vpc        = true
+  instance = aws_instance.customer_ngw_instance[0].id
+  depends_on = [aws_internet_gateway.customer_igw]
+}
+
+
+
 # Create NAT Gateway (optional)
 # Attach EIP and deploy to public subnet (AZa)
 
@@ -41,6 +54,25 @@ resource "aws_nat_gateway" "customer_ngw" {
 
   allocation_id = aws_eip.nat[count.index].id
   subnet_id     = aws_subnet.customer_public_subnet[0].id
+}
+
+# Create NAT Gateway Instance (optional)
+# Attach EIP and deploy to public subnet (AZa)
+
+resource "aws_instance" "customer_ngw_instance" {
+  count = var.require_nat_gateway_instance ? 1 : 0
+
+  ami = "ami-01ae0e01e7fffd105"
+  instance_type = "t2.micro"
+  subnet_id = aws_subnet.customer_public_subnet[0].id
+  source_dest_check = false
+
+  tags = {
+    key                 = "Name"
+    value               = "NAT gateway"
+  }
+
+ 
 }
 
 # Create public subnets
@@ -134,4 +166,12 @@ resource "aws_route" "customer_private_rt_a_default_route" {
   route_table_id         = aws_route_table.customer_private_rt.id
   destination_cidr_block = "0.0.0.0/0"
   nat_gateway_id         = aws_nat_gateway.customer_ngw[count.index].id
+}
+
+resource "aws_route" "customer_private_rt_a_default_route_nat_instance" {
+  count = var.require_nat_gateway_instance ? 1 : 0
+
+  route_table_id         = aws_route_table.customer_private_rt.id
+  destination_cidr_block = "0.0.0.0/0"
+  instance_id         = aws_instance.customer_ngw_instance[0].id
 }

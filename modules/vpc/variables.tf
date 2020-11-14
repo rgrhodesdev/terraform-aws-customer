@@ -29,3 +29,9 @@ variable "require_nat_gateway" {
   description = "NAT Gateway Required"
   type        = bool
 }
+
+variable "require_nat_gateway_instance" {
+  description = "NAT Gateway Instance Required"
+  type        = bool
+}
+
